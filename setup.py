@@ -39,7 +39,7 @@ setup(
         "": "src"
     },
     package_data={
-        "": ['*.txt', '*.rst', '*.md', '*.html', '*.json', '*.conf'],
+        "django_make_sqlalchemy": ['*.txt', '*.rst', '*.md', '*.html', '*.json', '*.conf'],
     },
     include_package_data=True,
     description="django orm compile to sqlalchemy ({})".format(git_version_hash),
