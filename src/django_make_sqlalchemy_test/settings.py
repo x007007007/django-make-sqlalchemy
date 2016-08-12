@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "django_make_sqlalchemy",
+    "django_make_sqlalchemy_test.inheritance"
 ]
 
 MIDDLEWARE_CLASSES = [

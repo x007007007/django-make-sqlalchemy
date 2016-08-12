@@ -1,5 +1,5 @@
 from django.apps import AppConfig
 
 
-class DjnagoMakeSqlalchemyConfig(AppConfig):
-    name = 'djnago_make_sqlalchemy'
+class DjangoMakeSqlAlchemyConfig(AppConfig):
+    name = 'django_make_SqlAlchemy'
