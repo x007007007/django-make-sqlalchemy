@@ -85,4 +85,11 @@ class Command(BaseCommand):
 
     def load_models(self, apps=None):
         for models in self.iter_models(apps):
-            print(models)
+            fields_iter = iter(models._meta.concrete_fields)
+            for field in fields_iter:
+                print(field.attname)
+
+
+    def field_to_sqlalchemy(self, field, attname):
+        assert isinstance(field, models.Field)
+
