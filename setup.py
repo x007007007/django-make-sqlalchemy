@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from __future__ import unicode_literals
 import os
 import subprocess
 import sys
@@ -32,18 +31,18 @@ requires = [
 
 setup(
     name='django_make_sqlalchemy',
-    version = get_version_number(),
+    version=get_version_number(),
     install_requires=requires,
     packages=["django_make_sqlalchemy"],
     package_dir={
         "": "src"
     },
     package_data={
-        "django_make_sqlalchemy": ['*.txt', '*.rst', '*.md', '*.html', '*.json', '*.conf'],
+        "": ['*.txt', '*.rst', '*.md', '*.html', '*.json', '*.conf'],
     },
     include_package_data=True,
     description="django orm compile to sqlalchemy ({})".format(git_version_hash),
-    author = "xuxingci",
+    author="xuxingci",
     author_email="x007007007@126.com",
     license='MIT License',
     url='https://bitbucket.org/deltameow/deltamiao',
