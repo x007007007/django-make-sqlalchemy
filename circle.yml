@@ -1,6 +1,6 @@
 machine:
   python:
-    version: python-2.7.9
+    version: 3.5.0
   post:
     - pyenv global 2.7.9 3.3.3 3.4.3 3.5.0
     
