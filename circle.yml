@@ -1,7 +1,19 @@
+machine:
+  python:
+    version: pypy-2.2.1
+    
+dependencies:
+  pre:
+    - pip install django
+
+test:
+  pre:
+    - ./manage.py collectstatic --no-input
+  post:
+    - bash <(curl -s https://codecov.io/bash)
+
 notify:
   webhooks:
     # A list of hook hashes, containing the url field
     # gitter hook
     - url: https://webhooks.gitter.im/e/bb6926d6ede3ba166ccb
-
-bash <(curl -s https://codecov.io/bash)
