@@ -1,14 +1,19 @@
 machine:
   python:
     version: pypy-2.2.1
+  post:
+    - pyenv global 2.7.9 3.3.3 3.4.3 3.5.0
     
 dependencies:
   pre:
     - pip install django
+    - pip install codecov
 
 test:
   pre:
-    - ./manage.py collectstatic --no-input
+    - ./manage.py
+  override:
+    - codecov
   post:
     - bash <(curl -s https://codecov.io/bash)
 
