@@ -3,7 +3,7 @@ from django.db import models
 
 
 class A(models.Model):
-    char = models.CharField("test char", max_length=128, null=True, blank=True)
+    char = models.CharField("test char", max_length=128, null=True, blank=True, db_column="test_char")
     int = models.IntegerField("test", auto_created=True)
     test = models.ForeignKey("C", related_name="test_a")
 
