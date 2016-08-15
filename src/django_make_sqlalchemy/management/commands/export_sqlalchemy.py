@@ -17,7 +17,6 @@ class Command(BaseCommand):
     if django.VERSION[1] == 7:
         from optparse import make_option
 
-        @staticmethod
         def _opt_callback(option, opt, value, parser, *args, **kwargs):
             if not hasattr(parser.values, 'app'):
                 parser.values._update_loose({
@@ -60,6 +59,7 @@ class Command(BaseCommand):
     help = 'Closes the specified poll for voting'
 
     def handle(self, *args, **options):
+        if not options['app']: options['app'] = None  # django 1.7 optarg don't have arguments app is empty list
         self._function_list = []
         self.load_models(options["app"])
 
@@ -105,7 +105,7 @@ class Command(BaseCommand):
             code_struct.extend(self.model_to_sqlalchemy_class_code(model))
             code_struct.extend(['', ''])
 
-        self.format_code(code_struct)
+        print("\n".join(self.iter_format_code(code_struct)))
 
 
     def field_to_sqlclchemy_type(self, field):
@@ -235,7 +235,7 @@ class Command(BaseCommand):
         )
         sa_fields = [
             '"""',
-            'Auto transfer from django app `{}` by django_make_sqlalchemy',
+            'Auto transfer from django app `{}` by django_make_sqlalchemy'.format(model._meta.app_label),
             models.__doc__ if models.__doc__ else "",
             '"""',
             '__tablename__ = "{table_name}"'.format(table_name=model._meta.db_table),
@@ -245,15 +245,15 @@ class Command(BaseCommand):
             sa_fields.append(self.field_to_sqlalchemy_class_code(field, field.attname))
         return [sa_block, sa_fields]
 
-    def format_code(self, code, level=0):
+    def iter_format_code(self, code, level=0):
         for subcode in code:
             if isinstance(subcode, list):
-                self.format_code(subcode, level+1)
+                yield "\n".join(self.iter_format_code(subcode, level+1))
             else:
                 indent = "    " * level
                 if subcode:
-                    print("{}{}".format(indent, subcode))
+                    yield ("{}{}".format(indent, subcode))
                 else:
-                    print("")
+                    yield ("")
 
 
