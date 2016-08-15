@@ -10,6 +10,151 @@ from django.apps import apps
 from collections import OrderedDict
 
 
+class C(object):
+    def __init__(self, v, start=None, end=None):
+        self.v = v
+        if start is None:
+            if "\n" in self.v:
+                self.start = '"""'
+            else:
+                self.start = '"'
+        else:
+            self.start = start
+        if end is None:
+            if "\n" in self.v:
+                self.end = '"""'
+            else:
+                self.end = '"'
+        else:
+            self.end = end
+
+    def __str__(self):
+        return '{}{}{}'.format(self.start, self.v, self.end)
+
+class CallCallable(object):
+    def __init__(self, name, *args, **kwargs):
+        self.name = name
+        self.args = list(args)  # type: list
+        self.kwargs = kwargs  # type: dict
+
+    def __str__(self):
+        assert isinstance(self.name, str)
+        paras = []
+        for arg in self.args:
+            paras.append(str(arg))
+        for k, v in self.kwargs.items():
+            paras.append("{}={}".format(k, str(v)))
+        return "{}({})".format(self.name, ", ".join(paras))
+
+class BindName(object):
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+    def __str__(self):
+        if isinstance(self.name, str):
+            return "{} = {}".format(self.name, str(self.value))
+        else:
+            return "{} = {}".format(", ".join(self.name), str(self.value))
+
+class TransferField(object):
+    def __init__(self, field):
+        assert isinstance(field, models.Field)
+        self.field = field
+        self.attrname, self.col_name = field.get_attname_column()
+        self.bn = lambda v: BindName(self.field.get_attname(), v)
+
+    def trans_col_name(self, field):
+        attname, col_name = field.get_attname_column()
+        if col_name is not None and attname != col_name:
+            return col_name
+
+    def trans_related(self, field):
+        if isinstance(field, models.OneToOneField):
+            print(field.rel.to._meta.object_name, field.rel.related_name, field.rel.related_query_name)
+            warnings.warn(field)
+        elif isinstance(field, models.ForeignKey):
+            # print(field.rel.to._meta.object_name, field.rel.related_name, field.rel.related_query_name)
+            rel_field_name = self.attrname[:-3] if self.attrname.endswith("_id") else self.attrname
+            rel_field_id = "{}_id".format(rel_field_name)
+            rel_field_attr_name, rel_field_db_name = field.rel.to._meta.pk.get_attname_column()
+            yield BindName(rel_field_id, (CallCallable(
+                "Column",
+                "Interger",
+                CallCallable(
+                    "ForeignKey",
+                    C("{}.{}".format(field.rel.to._meta.db_table, rel_field_db_name))
+                )
+            )))
+            yield BindName(rel_field_name, CallCallable(
+                "relationship",
+                '"{}"'.format(field.rel.to._meta.object_name),
+                back_populates=C("{}_set".format(rel_field_name))
+            ))
+        elif isinstance(field, models.ManyToManyField):
+            warnings.warn(field)
+
+    def trans_char(self, field):
+        kwargs = self.trans_args(field)
+        if field.max_length is not None:
+            sa_type = CallCallable("String", field.max_length)
+        else:
+            sa_type = "String"
+        return CallCallable("Column", sa_type, **kwargs)
+
+    def trans_int(self, field):
+        return CallCallable("Column", "Integer", **self.trans_args(field))
+
+    def trans_args(self, field):
+        kwargs = {}
+        if field.null is not None:
+            kwargs["nullable"] = field.null
+        if field.primary_key:
+            kwargs["primary_key"] = field.primary_key
+        if field.default is not django_fields.NOT_PROVIDED:
+            kwargs["default"] = field.default
+        return kwargs
+
+    def iter_trans(self):
+        bn = self.bn
+        field =self.field
+        cls = self.field.__class__
+        if cls in (
+                models.ManyToManyField,
+                models.OneToOneField,
+                models.ForeignKey):
+            for code in self.trans_related(field):
+                yield code
+        elif cls in (
+                models.CharField,
+                models.URLField,
+                models.EmailField,
+                models.SlugField):
+            yield bn(self.trans_char(field))
+        elif cls in (
+                models.IntegerField,
+                models.BigIntegerField,
+                models.SmallIntegerField,
+                models.PositiveSmallIntegerField,
+                models.PositiveIntegerField):
+            yield bn(self.trans_int(field))
+        elif cls in (models.FileField, models.FilePathField):
+            yield bn(self.trans_char(field))
+        elif cls == models.AutoField:
+            yield bn(CallCallable("Column", "Integer", **self.trans_args(field)))
+        elif cls == models.BooleanField:
+            yield bn(CallCallable("Column", "Boolean", **self.trans_args(field)))
+        elif cls == models.TextField:
+            yield bn(CallCallable("Column", "Text", **self.trans_args(field)))
+        elif cls == models.DateTimeField:
+            code = CallCallable("Column", "Datetime", **self.trans_args(field))
+        elif cls == models.TimeField:
+            yield bn(CallCallable("Column", "Time", **self.trans_args(field)))
+        elif cls == models.DateField:
+            yield bn(CallCallable("Column", "Data", **self.trans_args(field)))
+        else:
+            warnings.warn(self.field)
+
 class Command(BaseCommand):
     _function_list = None  # save callbeck function
     BASE_CLASS_NAME = "base"
@@ -17,7 +162,6 @@ class Command(BaseCommand):
     if django.VERSION[1] == 7:
         from optparse import make_option
 
-        @staticmethod
         def _opt_callback(option, opt, value, parser, *args, **kwargs):
             if not hasattr(parser.values, 'app'):
                 parser.values._update_loose({
@@ -60,7 +204,9 @@ class Command(BaseCommand):
     help = 'Closes the specified poll for voting'
 
     def handle(self, *args, **options):
+        if not options['app']: options['app'] = None  # django 1.7 optarg don't have arguments app is empty list
         self._function_list = []
+        self._many_to_many_tmp = []
         self.load_models(options["app"])
 
     @staticmethod
@@ -104,129 +250,15 @@ class Command(BaseCommand):
         for model in self.iter_models(apps):
             code_struct.extend(self.model_to_sqlalchemy_class_code(model))
             code_struct.extend(['', ''])
+        print ("\n".join(self.iter_format_code(code_struct)))
+        return ("\n".join(self.iter_format_code(code_struct)))
 
-        self.format_code(code_struct)
 
-
-    def field_to_sqlclchemy_type(self, field):
-        """
-        transfer rule:
-        sqlalchemy Type:
-            String
-                Text
-                Unicode
-                UnicodeText
-                Enum
-            Integer
-                SmallInteger
-                BigInteger
-            Numeric
-                Float
-            DateTime
-            Date
-            Time
-            LargeBinary
-                Binary
-            Boolean
-            Interval
-        django Type
-            AutoField
-            BooleanField                    ->  Boolean
-            CharField                       ->  String, Enum
-                EmailField                  ->  String
-                SlugField                   ->  String
-                URLField                    ->  String
-            FileField                       ->  String
-            FilePathField                   ->  String
-            TextField                       ->  Text
-            CommaSeparatedIntegerField      ->  Text
-            DateField                       ->  Date
-                DateTimeField               ->  DateTime
-            TimeField                       ->  Time
-            DecimalField                    ->  Numeric
-            DurationField                   ->  Interval
-            FloatField                      ->  Float
-            IntegerField                    ->  Integer
-                BigIntegerField             ->  BigInteger
-                SmallIntegerField           ->  SmallInteger
-                PositiveIntegerField
-                PositiveSmallIntegerField
-            IPAddressField
-            GenericIPAddressField
-            NullBooleanField
-            BinaryField
-            UUIDField
-
-        :param field:
-        :return: ( sqlalchemy type name , {key :args, ...} )
-        """
+    def field_to_sqlalchemy_class_code(self, field):
         assert isinstance(field, models.Field)
-        sa_type = {
-            models.ManyToManyField:     (self.trans_related(field),),
-            models.ForeignKey:          (self.trans_related(field),),
-            models.OneToOneField:       (self.trans_related(field),),
-            models.AutoField:           (("Column", "Integer"), self.trans_args(field)),
-            models.BooleanField:        (("Column", "Boolean"), self.trans_args(field)),
-            models.CharField:           (self.trans_char(field), self.trans_args(field)),
-                models.URLField:            (self.trans_char(field), self.trans_args(field)),
-                models.EmailField:          (self.trans_char(field), self.trans_args(field)),
-                models.SlugField:           (self.trans_char(field), self.trans_args(field)),
-            models.TextField:           (("Column", "Text"), self.trans_args(field)),
-            models.IntegerField:        (self.trans_int(field), self.trans_args(field)),
-                models.BigIntegerField: (self.trans_int(field), self.trans_args(field)),
-                models.SmallIntegerField: (self.trans_int(field), self.trans_args(field)),
-                models.PositiveSmallIntegerField: (self.trans_int(field), self.trans_args(field)),
-                models.PositiveIntegerField: (self.trans_int(field), self.trans_args(field)),
-            models.FileField:           (self.trans_char(field), self.trans_args(field)),
-            models.FilePathField:       (self.trans_char(field), self.trans_args(field)),
-            models.DateTimeField:       (("Column", "Datetime"), self.trans_args(field)),
-            models.TimeField:           (("Column", "Time"), self.trans_args(field)),
-            models.DateField:           (("Column", "Data"), self.trans_args(field)),
-        }.get(field.__class__, type(field))
-        return sa_type
-
-    def trans_related(self, field):
-        if field.many_to_many:
-            print(field.remote_field)
-        return "relationship",
-
-    def trans_char(self, field):
-        if field.max_length is not None:
-            sa_type = "String({})".format(field.max_length)
-        else:
-            sa_type = "String"
-        return "Column", sa_type
-
-    def trans_int(self, field):
-        return "Column", "Integer"
-
-    def trans_args(self, field):
-        kwargs = {}
-        if field.null is not None:
-            kwargs["nullable"] = field.null
-        if field.primary_key:
-            kwargs["primary_key"] = field.primary_key
-        if field.default is not django_fields.NOT_PROVIDED:
-            kwargs["default"] = field.default
-        return kwargs
-
-    def field_to_sqlalchemy_class_code(self, field, attname):
-        assert isinstance(field, models.Field)
-
-        rule = (self.field_to_sqlclchemy_type(field))
-        para_list = []
-        args_str = ", ".join(rule[0][1:])
-        if args_str:
-            para_list.append(args_str)
-        if len(rule) > 1:
-            for k, v in rule[1].items():
-                para_list.append("{}={}".format(k, v))
-
-        return "{name} = {f_name}({args})".format(
-            name=field.attname,
-            f_name=rule[0][0],
-            args=", ".join(para_list)
-        )
+        tf = TransferField(field)
+        for code in tf.iter_trans():
+            yield code
 
     def model_to_sqlalchemy_class_code(self, model):
         sa_block = "class {class_name}({base_name}):".format(
@@ -235,25 +267,26 @@ class Command(BaseCommand):
         )
         sa_fields = [
             '"""',
-            'Auto transfer from django app `{}` by django_make_sqlalchemy',
+            'Auto transfer from django app `{}` by django_make_sqlalchemy'.format(model._meta.app_label),
             models.__doc__ if models.__doc__ else "",
             '"""',
             '__tablename__ = "{table_name}"'.format(table_name=model._meta.db_table),
         ]
 
         for field in self.iter_fields(model):
-            sa_fields.append(self.field_to_sqlalchemy_class_code(field, field.attname))
+            for code in self.field_to_sqlalchemy_class_code(field):
+                sa_fields.append(code)
         return [sa_block, sa_fields]
 
-    def format_code(self, code, level=0):
+    def iter_format_code(self, code, level=0):
         for subcode in code:
             if isinstance(subcode, list):
-                self.format_code(subcode, level+1)
+                yield "\n".join(self.iter_format_code(subcode, level+1))
             else:
                 indent = "    " * level
                 if subcode:
-                    print("{}{}".format(indent, subcode))
+                    yield ("{}{}".format(indent, subcode))
                 else:
-                    print("")
+                    yield ("")
 
 
