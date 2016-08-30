@@ -80,7 +80,7 @@ class TransferField(object):
             rel_field_attr_name, rel_field_db_name = field.rel.to._meta.pk.get_attname_column()
             yield BindName(rel_field_id, (CallCallable(
                 "Column",
-                "Interger",
+                "Integer",
                 CallCallable(
                     "ForeignKey",
                     C("{}.{}".format(field.rel.to._meta.db_table, rel_field_db_name))
@@ -151,13 +151,13 @@ class TransferField(object):
         elif cls == models.TimeField:
             yield bn(CallCallable("Column", "Time", **self.trans_args(field)))
         elif cls == models.DateField:
-            yield bn(CallCallable("Column", "Data", **self.trans_args(field)))
+            yield bn(CallCallable("Column", "Date", **self.trans_args(field)))
         else:
             warnings.warn(self.field)
 
 class Command(BaseCommand):
     _function_list = None  # save callbeck function
-    BASE_CLASS_NAME = "base"
+    BASE_CLASS_NAME = "Base"
 
     if django.VERSION[1] == 7:
         from optparse import make_option
@@ -197,17 +197,42 @@ class Command(BaseCommand):
                 'path',
                 type=str,
                 nargs='?',
-                default=os.path.abspath(os.path.join(os.path.curdir, "sqlalchemy"))
+                default=os.path.abspath(os.path.join(os.path.curdir, "djsqlalchemy"))
             )
             parser.add_argument('-a', '--app', nargs='*', type=str)
 
     help = 'Closes the specified poll for voting'
 
+    def prepare_output(self, path, app):
+        if not os.path.exists(path):
+            os.mkdir(path)
+            with open("{}/_base.py".format(path), "w") as fp:
+                fp.write("""
+from sqlalchemy.ext.declarative import declarative_base
+{} = declarative_base()
+
+""".format(self.BASE_CLASS_NAME))
+        if not os.path.exists("{}/__init__.py".format(path)):
+            with open("{}/__init__.py".format(path), "w") as fp: pass
+
+        out_path = '{}/{}.py'.format(path, app)
+        with open(out_path, "w") as fp:
+            fp.write("""from sqlalchemy import *
+from sqlalchemy.orm import *
+
+from ._base import {}
+
+""".format(self.BASE_CLASS_NAME))
+        return open(out_path, "a")
+
     def handle(self, *args, **options):
         if not options['app']: options['app'] = None  # django 1.7 optarg don't have arguments app is empty list
         self._function_list = []
         self._many_to_many_tmp = []
-        self.load_models(options["app"])
+        res = self.load_models(options["app"])
+        with self.prepare_output(options['path'], 'all') as fp:
+            fp.write(res)
+
 
     @staticmethod
     def app_str_to_app_config(app_id):  #  type: django.apps.config.AppConfig
