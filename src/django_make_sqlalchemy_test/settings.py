@@ -79,7 +79,15 @@ WSGI_APPLICATION = 'django_make_sqlalchemy_test.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
+        'NAME': os.path.join(BASE_DIR, 'db_1.sqlite3'),
+    },
+    'backup1': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': os.path.join(BASE_DIR, 'db_2.sqlite3'),
+    },
+    'backup2': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': os.path.join(BASE_DIR, 'db_3.sqlite3'),
     }
 }
 
