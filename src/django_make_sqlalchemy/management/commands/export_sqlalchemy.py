@@ -31,6 +31,7 @@ class C(object):
     def __str__(self):
         return '{}{}{}'.format(self.start, self.v, self.end)
 
+
 class CallCallable(object):
     def __init__(self, name, *args, **kwargs):
         self.name = name
@@ -38,13 +39,14 @@ class CallCallable(object):
         self.kwargs = kwargs  # type: dict
 
     def __str__(self):
-        assert isinstance(self.name, str)
+       # assert isinstance(self.name, str), self.name
         paras = []
         for arg in self.args:
             paras.append(str(arg))
         for k, v in self.kwargs.items():
             paras.append("{}={}".format(k, str(v)))
         return "{}({})".format(self.name, ", ".join(paras))
+
 
 class BindName(object):
     def __init__(self, name, value):
@@ -56,6 +58,7 @@ class BindName(object):
             return "{} = {}".format(self.name, str(self.value))
         else:
             return "{} = {}".format(", ".join(self.name), str(self.value))
+
 
 class TransferField(object):
     def __init__(self, field):
@@ -71,8 +74,13 @@ class TransferField(object):
 
     def trans_related(self, field):
         if isinstance(field, models.OneToOneField):
-            print(field.rel.to._meta.object_name, field.rel.related_name, field.rel.related_query_name)
-            warnings.warn(field)
+            warnings.warn("models.OneToOne")
+            yield "#  ... programming"
+            yield BindName(
+                "unknown", CallCallable(
+                    C(str(field.rel.to._meta.object_name))
+                )
+            )
         elif isinstance(field, models.ForeignKey):
             # print(field.rel.to._meta.object_name, field.rel.related_name, field.rel.related_query_name)
             rel_field_name = self.attrname[:-3] if self.attrname.endswith("_id") else self.attrname
@@ -92,6 +100,7 @@ class TransferField(object):
                 back_populates=C("{}_set".format(rel_field_name))
             ))
         elif isinstance(field, models.ManyToManyField):
+            yield "#  ... programming"
             warnings.warn(field)
 
     def trans_char(self, field):
