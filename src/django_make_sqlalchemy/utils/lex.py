@@ -21,7 +21,7 @@ class BlankLine(Stem):
 
 class Stems(Stem, UserList):
     def __init__(self, *args):
-        self.data = args
+        self.data = list(args)
 
     def get_lines(self):
         for stem in self.data:
@@ -30,6 +30,51 @@ class Stems(Stem, UserList):
                     yield s
             else:
                 yield stem
+
+
+class ClassStem(Stem):
+    type = "class"
+
+    def __init__(self, name, args=None, stems=None):
+        assert isinstance(name, str)
+        assert isinstance(stems, (Stems, None.__class__))
+        self.name = name
+        self.args = args
+        if stems is None:
+            self.stems = "pass"
+        else:
+            self.stems = stems
+
+    def get_lines(self):
+        block = Block(
+            Parentheses(
+                start="{} {}".format(self.type, self.name),
+                body=self.args,
+                end=":"
+            ),
+            self.stems,
+            sep=""
+        )
+        for b in block.get_lines():
+            yield b
+
+
+class FunStem(ClassStem):
+    type = "def"
+
+
+class Call(object):
+    def __init__(self, name, *args, **kwargs):
+        self.name = name
+        self.args = args
+        self.kwargs = kwargs
+
+    def __str__(self):
+        return "{}({}{})".format(
+            self.name,
+            ", ".join(self.args),
+            ", ".join("{}={}".format(k, v) for k, v in self.kwargs.items())
+        )
 
 
 class Operator(Stem):
@@ -55,7 +100,7 @@ class Parentheses(Operator):
         if isinstance(self.body, Stem):
             for l in Block(temp, self.body, sep="(").get_lines():
                 yield l
-            yield ")"
+            temp = ")"
         elif self.body is None:
             temp += "()"
         else:
@@ -63,6 +108,10 @@ class Parentheses(Operator):
         if isinstance(self.end, Stem):
             end = list(self.end.get_lines())
             yield "{}{}".format(temp, end[0])
+        elif self.end is None:
+            yield temp
+        else:
+            yield "{}{}".format(temp, self.end)
 
 
 class Comment(Operator):
@@ -99,12 +148,12 @@ class Block(Stem):
 
     def get_lines(self):
         if isinstance(self.head, Stem):
-            heads = list(self.head)
+            heads = list(self.head.get_lines())
             for head in heads[:-1]: yield head
             if heads:
-                yield "{}{}".format(heads[-1], sep)
+                yield "{}{}".format(heads[-1], self.sep)
         else:
-            yield self.head
+            yield "{}{}".format(self.head, self.sep)
 
         if isinstance(self.body, Stem):
             for b in self.body.get_lines():
@@ -113,22 +162,15 @@ class Block(Stem):
             yield "{}{}".format(self.indent, self.body)
 
 
-class ClassStem(Block):
-    def __init__(self, name, exp, stem):
-        self.name = name
-        self.exp = exp
-        self.stem = stem
-
-    def get_lines(self):
-        yield 1
-
-
 class VarName(object):
-    def __init__(self, name):
+    def __init__(self, name, *args):
         self.name = name
+        self.args = args
 
     def __str__(self):
-        return self.name
+        l = [self.name]
+        l.extend(self.args)
+        return ", ".join(l)
 
 
 class Bind(Operator):
@@ -142,12 +184,33 @@ class Bind(Operator):
         )
 
 
+class Args(object):
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    def __str__(self):
+        return ", ".join("{}={}".format(k, v) for k, v in self.kwargs.items())
+
+
 if __name__ == "__main__":
-    print(Stems(
+    context = Stems(
         Bind(a=1, c=3),
         Bind(d=VarName("a")),
         BlankLine(2),
         Block("class hello world", Stems(
             Comment("test ", start=Bind(xxc=VarName("d")))
         ))
+    )
+    context.append(BlankLine(2))
+    context.append(ClassStem(
+        "Hello", "object", Stems(
+            Bind(a=1),
+            Bind(b=2),
+            FunStem("__init__", Args(a=1, b=2, c=3), Stems(
+                Bind(**{"self.a": 5}),
+                Call("print", "1", "2", "3")
+            ))
+        )
     ))
+
+    print(context)
