@@ -8,56 +8,10 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import models
 from django.apps import apps
 from collections import OrderedDict
+from django_make_sqlalchemy.utils import lex as l
 
 
-class C(object):
-    def __init__(self, v, start=None, end=None):
-        self.v = v
-        if start is None:
-            if "\n" in self.v:
-                self.start = '"""'
-            else:
-                self.start = '"'
-        else:
-            self.start = start
-        if end is None:
-            if "\n" in self.v:
-                self.end = '"""'
-            else:
-                self.end = '"'
-        else:
-            self.end = end
 
-    def __str__(self):
-        return '{}{}{}'.format(self.start, self.v, self.end)
-
-
-class CallCallable(object):
-    def __init__(self, name, *args, **kwargs):
-        self.name = name
-        self.args = list(args)  # type: list
-        self.kwargs = kwargs  # type: dict
-
-    def __str__(self):
-       # assert isinstance(self.name, str), self.name
-        paras = []
-        for arg in self.args:
-            paras.append(str(arg))
-        for k, v in self.kwargs.items():
-            paras.append("{}={}".format(k, str(v)))
-        return "{}({})".format(self.name, ", ".join(paras))
-
-
-class BindName(object):
-    def __init__(self, name, value):
-        self.name = name
-        self.value = value
-
-    def __str__(self):
-        if isinstance(self.name, str):
-            return "{} = {}".format(self.name, str(self.value))
-        else:
-            return "{} = {}".format(", ".join(self.name), str(self.value))
 
 
 class TransferField(object):
@@ -75,9 +29,10 @@ class TransferField(object):
     def trans_related(self, field):
         if isinstance(field, models.OneToOneField):
             warnings.warn("models.OneToOne")
+            print(field.get_attname(), field.rel.to)
             yield "#  ... programming"
             yield BindName(
-                "unknown", CallCallable(
+                field.get_attname(), CallCallable(
                     C(str(field.rel.to._meta.object_name))
                 )
             )
@@ -164,6 +119,7 @@ class TransferField(object):
         else:
             warnings.warn(self.field)
 
+
 class Command(BaseCommand):
     _function_list = None  # save callbeck function
     BASE_CLASS_NAME = "Base"
@@ -235,6 +191,7 @@ from ._base import {}
         return open(out_path, "a")
 
     def handle(self, *args, **options):
+        self.output_module = l.Module()
         if not options['app']: options['app'] = None  # django 1.7 optarg don't have arguments app is empty list
         self._function_list = []
         self._many_to_many_tmp = []

@@ -180,7 +180,7 @@ class Bind(Operator):
     def get_lines(self):
         yield "{names} = {values}".format(
             names=",".join(self.kwargs.keys()),
-            values=",".join(str(i) for i in self.kwargs.values())
+            values=",".join(repr(i) for i in self.kwargs.values())
         )
 
 
@@ -191,6 +191,9 @@ class Args(object):
     def __str__(self):
         return ", ".join("{}={}".format(k, v) for k, v in self.kwargs.items())
 
+
+class Module(Stems):
+    pass
 
 if __name__ == "__main__":
     context = Stems(

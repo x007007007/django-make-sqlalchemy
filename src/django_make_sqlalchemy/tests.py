@@ -9,4 +9,3 @@ class ExportSqlAlchemyTestCase(TestCase):
     def test_1(self):
         # res = call_command('export_sqlalchemy')
         # print(res)
-        pass
